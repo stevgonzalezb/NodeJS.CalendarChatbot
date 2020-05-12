@@ -4,6 +4,7 @@ const functions = require('firebase-functions');
 const {google} = require('googleapis');
 const {WebhookClient} = require('dialogflow-fulfillment');
 const { OAuth2 } = google.auth
+const moment = require('moment-timezone');
 
 
 // Create a new instance of oAuth and set our Client ID & Client Secret.
@@ -74,20 +75,44 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
     return checkDatesCalendar(pFecha).then((res) =>{
 
-      agent.add('RESUELVE ' + res);
+      agent.add('Las horas disponibles son las siguientes: \n' +
+                '*1* - ' + moment(res[0]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a') +'\n'+
+                '*2* - ' + moment(res[1]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a') +'\n'+
+                '*3* - ' + moment(res[2]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a') +'\n'+
+                '*4* - ' + moment(res[3]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
 
     }).catch((err) =>{
 
       agent.add(err.message);
 
     })
-
-
   }
+
+  function confirmHour(agent) {
+
+    const pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
+    
+    return checkDatesCalendar(pFecha).then((res) =>{
+
+      let num = parseInt(agent.parameters.number);
+      agent.add('Usted eligió: ' + num);
+
+      agent.add('Usted eligió: \n' +
+                '*'+ num +'* - ' + moment(res[num-1]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
+
+    }).catch((err) =>{
+
+      agent.add(err.message);
+
+    })
+  }
+
+
 
   let intentMap = new Map();
   intentMap.set('Agendar Cita', makeAppointment);
   intentMap.set('Agendar Cita - Agendar - fecha', searchAvailability);
+  intentMap.set('Agendar Cita - Agendar - fecha - select.number', confirmHour);
   agent.handleRequest(intentMap);
 });
 
@@ -96,40 +121,140 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 function checkDatesCalendar(psFecha){
   return new Promise((resolve, reject) => {
 
-    const fechaHoy = new Date();
+    const fechaHoy = moment().tz('America/Costa_Rica');
 
-    if (fechaHoy.getHours() < 20) {
 
-      if(psFecha.getDate() === fechaHoy.getDate()) { 
-        resolve('hoy');
-      }
+    switch(psFecha.getDate())
+    {
+      case fechaHoy.date():
 
-      if(psFecha.getDate() === (fechaHoy.getDate()+1) ) { 
-        resolve('mañana');
-      }
+        //if (fechaHoy.hour < 20 & (fechaHoy.day() >= 1 && fechaHoy.day() < 7))
+        //{
+          return validateCalendar(psFecha).then((res) =>{
 
-      else{
-        resolve('fecha');
-      }
+            resolve(res);
+    
+          }).catch((err) =>{
+    
+          reject(err.message);
+    
+          })
+        //}
+        //else
+          //reject(new Error('Disculpa, hoy no hay citas disponibles. Recuerda que nuestro horario es de L-V hasta las 8PM.'));
+        break;
+      
+      case fechaHoy.date()+1:
+        return validateCalendar(psFecha).then((res) =>{
+
+          resolve(res);
+    
+        }).catch((err) =>{
+    
+         reject(err.message);
+    
+        })
+      break;
+
+      default:
+        return validateCalendar(psFecha).then((res) =>{
+
+          resolve(res);
+    
+        }).catch((err) =>{
+    
+         reject(err.message);
+    
+        })
+        break;
     }
-    else 
-      reject(new Error('Disculpa, ya hoy no hay mas disponibilidad de citas'));
-
-
-
-
-  if(1 === 1)
-    resolve();
-  else
-    reject();
-
   });
 }
 
 
+function validateCalendar (psDateTimeStart) {
+  return new Promise((resolve, reject) => {
+    var startDate = moment(psDateTimeStart).tz('America/Costa_Rica');//new Date(psDateTimeStart);
+    startDate.hours(8);
+    var endDate = moment(psDateTimeStart).tz('America/Costa_Rica');//new Date(psDateTimeStart);
+    endDate.hours(20);
 
 
+    let freeSlots = []; 
+    let hourSlots = [];
+    let events;
 
+    calendar.freebusy.query(
+      {
+        resource: {
+          timeMin: startDate,
+          timeMax: endDate,
+          timeZone: timeZone,
+          items: [{ id: calendarId_Brandon }],
+        },
+      },
+      (err, res) => {
+        // Check for errors in our query and log them if they exist.
+        if (err) return console.error('Free Busy Query Error: ', err)
+
+        events = res.data.calendars[calendarId_Brandon].busy
+
+        //console.log('FREE BUSY: ' + events);
+
+        events.forEach(function (event, index) { //calculate free from busy times
+          //console.log('EVENT: ' + event.start +' // '+ event.end );
+          if (index == 0 && new Date(startDate) < new Date(event.start)) {
+              freeSlots.push({startDate: startDate, endDate: event.start});
+          }
+          if (index == 0) {
+              startDate = event.end;
+          }
+          else if (events[index - 1].end < event.start) {
+              freeSlots.push({startDate: events[index - 1].end, endDate: event.start});
+          }
+    
+          if (events.length == (index + 1) && new Date(event.end) < endDate) {
+              freeSlots.push({startDate: event.end, endDate: endDate});
+          }
+      });
+    
+    
+      if (events.length == 0) {
+          freeSlots.push({startDate: startDate, endDate: endDate});
+      }
+    
+      //console.log('FREE SLOTS COUNT: ' + freeSlots.length );
+
+      freeSlots.forEach(function(free, index){
+        var freeHours = (((new Date(free.endDate).getTime() - new Date(free.startDate).getTime()) / 1000) / 60) / 30 
+        let freeH = new Date(free.startDate);
+        //console.log('FREE SLOTS: ' + free.startDate +' '+ free.endDate +' => '+ freeHours);
+        
+        for (let i = 0; i < freeHours ; i++) {
+          if (i === 0){
+            //console.log('PUSH: ' + new Date(free.startDate));
+            hourSlots.push(free.startDate);
+          }
+          else{
+            //console.log('PUSH: ' + new Date(freeH.setMinutes(freeH.getMinutes()+30)));
+            hourSlots.push(freeH.setMinutes(freeH.getMinutes()+30));  
+          }
+        }
+      
+      })
+
+
+      /*for (let index = 0; index < hourSlots.length; index++) {
+        console.log('FREE HOUR SLOTS ' + index + ': ' + moment(hourSlots[index]).tz('America/Costa_Rica').format('MMMM Do YYYY, h:mm:ss a'));
+      }*/
+      resolve(hourSlots);
+
+      }
+    )
+
+  });
+   
+}
 
 
 function createCalendarEvent (psEvent, psDateTimeStart, psDateTimeEnd) {
