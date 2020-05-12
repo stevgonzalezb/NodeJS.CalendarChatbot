@@ -26,6 +26,7 @@ process.env.DEBUG = 'dialogflow:*'; // enables lib debugging statements
 
 const timeZone = 'America/Costa_Rica';
 const timeZoneOffset = '-06:00';
+//let pFecha = new Date();
 
 
 exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
@@ -33,6 +34,8 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   const agent = new WebhookClient({ request, response });
 
   const appointment_type = agent.parameters.AppointmentType
+
+  const pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
 
   function makeAppointment (agent) {
     // Calculate appointment start and end datetimes (end = +1hr from start)
@@ -71,7 +74,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   function searchAvailability(agent) {
 
-    const pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
+    //pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
 
     return checkDatesCalendar(pFecha).then((res) =>{
 
@@ -90,12 +93,10 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   function confirmHour(agent) {
 
-    const pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
-    
     return checkDatesCalendar(pFecha).then((res) =>{
 
       let num = parseInt(agent.parameters.number);
-      agent.add('Usted eligió: ' + num);
+      agent.add('Usted eligió: ' + num + ' == ' + res[num-1]);
 
       agent.add('Usted eligió: \n' +
                 '*'+ num +'* - ' + moment(res[num-1]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
