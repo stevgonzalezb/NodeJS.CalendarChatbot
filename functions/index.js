@@ -7,7 +7,7 @@ const { OAuth2 } = google.auth
 const moment = require('moment-timezone');
 
 
-// Create a new instance of oAuth and set our Client ID & Client Secret.
+//Credenciales de autenticación chatbotcr
 const oAuth2Client = new OAuth2(
   '998451104891-nrac98l3pntj6tke4cm6q0k0ifeehqqt.apps.googleusercontent.com',
   'NmGZnzPN361EITV0UcpnaOew'
@@ -16,40 +16,29 @@ oAuth2Client.setCredentials({
   refresh_token: '1//044ZqEvaKN-dfCgYIARAAGAQSNwF-L9IrrySW-5SbHqJelBi-G4xbIbnqDsKv3MnC-MfISdGIJ49-aVmUgN2PlJt1SQDup5iD9KM',
 })
 
-
-// Enter your calendar ID below and service account JSON below
 const calendarId_Brandon = "s1tt67eiflb120io7tif3pmpp0@group.calendar.google.com"
-
 const calendar = google.calendar({ version: 'v3', auth: oAuth2Client })
-process.env.DEBUG = 'dialogflow:*'; // enables lib debugging statements
-
-
 const timeZone = 'America/Costa_Rica';
 const timeZoneOffset = '-06:00';
-//let pFecha = new Date();
+process.env.DEBUG = 'dialogflow:*'; // enables lib debugging statements
 
 
 exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
 
   const agent = new WebhookClient({ request, response });
+  const pFecha = moment(agent.parameters.date).tz('America/Costa_Rica');
 
-  const appointment_type = agent.parameters.AppointmentType
+  function makeAppointment (fechaInicio) {
 
-  const pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
-
-  function makeAppointment (agent) {
-    // Calculate appointment start and end datetimes (end = +1hr from start)
-    //console.log("Parameters", agent.parameters.date);
-    const dateTimeStart = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.time.split('T')[1].split('-')[0] + timeZoneOffset));
+    const dateTimeStart = new Date(fechaInicio + timeZoneOffset);
     const dateTimeEnd = new Date(new Date(dateTimeStart).setHours(dateTimeStart.getHours() + 0,30));
     const appointmentTimeString = dateTimeStart.toLocaleString(
       'en-US',
       { month: 'short', day: 'numeric', hour: 'numeric', timeZone: timeZone }
     );
 
-
     const event = {
-      summary: `Cita ${appointment_type}`,
+      summary: `Cita corte cabello`,
       description: ` `,
       colorId: 1,
       start: {
@@ -74,15 +63,14 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   function searchAvailability(agent) {
 
-    //pFecha = new Date(Date.parse(agent.parameters.date.split('T')[0] + 'T' + agent.parameters.date.split('T')[1].split('-')[0] + timeZoneOffset));
-
     return checkDatesCalendar(pFecha).then((res) =>{
 
       agent.add('Las horas disponibles son las siguientes: \n' +
-                '*1* - ' + moment(res[0]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a') +'\n'+
-                '*2* - ' + moment(res[1]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a') +'\n'+
-                '*3* - ' + moment(res[2]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a') +'\n'+
-                '*4* - ' + moment(res[3]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
+                '*1* - ' + moment(res[0]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
+                '*2* - ' + moment(res[1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
+                '*3* - ' + moment(res[2]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
+                '*4* - ' + moment(res[3]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') 
+                +' '+ moment(pFecha).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a'));
 
     }).catch((err) =>{
 
@@ -93,13 +81,13 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   function confirmHour(agent) {
 
-    return checkDatesCalendar(pFecha).then((res) =>{
+    const pFecha2 = agent.context.get('date');
+    const num = parseInt(agent.parameters.number);
 
-      let num = parseInt(agent.parameters.number);
-      agent.add('Usted eligió: ' + num + ' == ' + res[num-1]);
+    return checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica')).then((res) =>{ 
 
       agent.add('Usted eligió: \n' +
-                '*'+ num +'* - ' + moment(res[num-1]).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
+                '*'+ num +'* - ' + moment(res[num-1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +' '+ moment(pFecha2.parameters.date).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
 
     }).catch((err) =>{
 
@@ -108,8 +96,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     })
   }
 
-
-
+  //Mapeo de Intents - Funciones
   let intentMap = new Map();
   intentMap.set('Agendar Cita', makeAppointment);
   intentMap.set('Agendar Cita - Agendar - fecha', searchAvailability);
@@ -124,8 +111,7 @@ function checkDatesCalendar(psFecha){
 
     const fechaHoy = moment().tz('America/Costa_Rica');
 
-
-    switch(psFecha.getDate())
+    switch(psFecha.date())
     {
       case fechaHoy.date():
 
@@ -180,7 +166,6 @@ function validateCalendar (psDateTimeStart) {
     var endDate = moment(psDateTimeStart).tz('America/Costa_Rica');//new Date(psDateTimeStart);
     endDate.hours(20);
 
-
     let freeSlots = []; 
     let hourSlots = [];
     let events;
@@ -199,8 +184,6 @@ function validateCalendar (psDateTimeStart) {
         if (err) return console.error('Free Busy Query Error: ', err)
 
         events = res.data.calendars[calendarId_Brandon].busy
-
-        //console.log('FREE BUSY: ' + events);
 
         events.forEach(function (event, index) { //calculate free from busy times
           //console.log('EVENT: ' + event.start +' // '+ event.end );
@@ -244,10 +227,6 @@ function validateCalendar (psDateTimeStart) {
       
       })
 
-
-      /*for (let index = 0; index < hourSlots.length; index++) {
-        console.log('FREE HOUR SLOTS ' + index + ': ' + moment(hourSlots[index]).tz('America/Costa_Rica').format('MMMM Do YYYY, h:mm:ss a'));
-      }*/
       resolve(hourSlots);
 
       }
@@ -295,53 +274,3 @@ function createCalendarEvent (psEvent, psDateTimeStart, psDateTimeEnd) {
   )
 });
 }
-
-
-
-
-
-
-//function createCalendarEvent_old (dateTimeStart, dateTimeEnd, appointment_type) {
-//  return new Promise((resolve, reject) => {
-//    calendar.events.list({
-//      auth: serviceAccountAuth, // List events for time period
-//      calendarId: calendarId,
-//      timeMin: dateTimeStart.toISOString(),
-//      timeMax: dateTimeEnd.toISOString()
-//    }, (err, calendarResponse) => {
-      // Check if there is a event already on the Calendar
-//      if (err || calendarResponse.data.items.length > 0) {
-//        reject(err || new Error('Requested time conflicts with another appointment'));
-//      } else {
-        // Create event for the requested time period
-//        calendar.events.insert({ auth: serviceAccountAuth,
-//          calendarId: calendarId,
-//          resource: {summary: appointment_type +' Cita', description: appointment_type,
-//            start: {dateTime: dateTimeStart},
-//            end: {dateTime: dateTimeEnd}}
-//        }, (err, event) => {
-//          err ? reject(err) : resolve(event);
-//        }
-//        );
-//      }
-//    });
-//  });
-//}
-
-
- //function getPendientes(agent) {
- //   return getDataQueue().then (res =>{
- //       console.log(JSON.parse(res));
-        
- //     res.data.map(dato => {
- //       console.log(dato[1]);
- //       agent.add(`Pendientes: ${dato[1]}.`);
- //       return null;
- //     });     
- //       return null;
- //   });
-// }
-
- //function getDataQueue() {
- // return axios.get('https://sheets.googleapis.com/v4/spreadsheets/1EcJJ3kb2j1wBtn4GaWuil6OHex_6zY8UBHyMTj-AWic/values/B2/?key=AIzaSyDNQ4YIVBRbCj-jHpRBre4s7Luo0zY-rMI');
-//}
