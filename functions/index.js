@@ -28,17 +28,18 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   const agent = new WebhookClient({ request, response });
   const pFecha = moment(agent.parameters.date).tz('America/Costa_Rica');
 
-  function makeAppointment (fechaInicio) {
+  function makeAppointment (agent) {
 
-    const dateTimeStart = new Date(fechaInicio + timeZoneOffset);
-    const dateTimeEnd = new Date(new Date(dateTimeStart).setHours(dateTimeStart.getHours() + 0,30));
+    const contextIn = agent.context.get('confirm-date');
+    const dateTimeStart = moment(contextIn.parameters.date).tz('America/Costa_Rica');
+    const dateTimeEnd =  moment(contextIn.parameters.date).tz('America/Costa_Rica').add(30, 'm'); //new Date(new Date(dateTimeStart).setHours(dateTimeStart.getHours() + 0,30));
     const appointmentTimeString = dateTimeStart.toLocaleString(
       'en-US',
       { month: 'short', day: 'numeric', hour: 'numeric', timeZone: timeZone }
     );
 
     const event = {
-      summary: `Cita corte cabello`,
+      summary: `${contextIn.parameters.name} - CITA CHATBOT`,
       description: ` `,
       colorId: 1,
       start: {
@@ -50,7 +51,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
         timeZone: timeZone,
       },
     }
-
+    console.log('FECHAS CREATE: ' + contextIn.parameters.name +' -- '+ moment(contextIn.parameters.date).tz('America/Costa_Rica') +' -- '+ new Date(contextIn.parameters.date));
     // Check the availibility of the time, and make an appointment if there is time on the calendar
     return createCalendarEvent(event, dateTimeStart, dateTimeEnd).then(() => {
       agent.add(`Perfecto hemos agendado tu cita!!.😀
@@ -69,8 +70,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 '*1* - ' + moment(res[0]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
                 '*2* - ' + moment(res[1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
                 '*3* - ' + moment(res[2]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
-                '*4* - ' + moment(res[3]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') 
-                +' '+ moment(pFecha).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a'));
+                '*4* - ' + moment(res[3]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a'));
 
     }).catch((err) =>{
 
@@ -82,12 +82,16 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   function confirmHour(agent) {
 
     const pFecha2 = agent.context.get('date');
+    const name = agent.context.get('person-name');
     const num = parseInt(agent.parameters.number);
-
+    console.log(name.parameters.name +' '+ toString(name.parameters.name));
     return checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica')).then((res) =>{ 
 
-      agent.add('Usted eligió: \n' +
-                '*'+ num +'* - ' + moment(res[num-1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +' '+ moment(pFecha2.parameters.date).tz('America/Costa_Rica').format('MM/D/YYYY, h:mm a'));
+      agent.add(name.parameters.name.name + ', usted eligió: '+ moment(res[num-1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') + 
+                '\n*Sí* - Confirmar' + 
+                '\n*No* - Cancelar');
+
+      agent.context.set({name:"confirm-date", lifespan: 5, parameters:{date: res[num-1], name: name.parameters.name.name}});
 
     }).catch((err) =>{
 
@@ -98,9 +102,9 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   //Mapeo de Intents - Funciones
   let intentMap = new Map();
-  intentMap.set('Agendar Cita', makeAppointment);
   intentMap.set('Agendar Cita - Agendar - fecha', searchAvailability);
   intentMap.set('Agendar Cita - Agendar - fecha - select.number', confirmHour);
+  intentMap.set('Agendar Cita - Agendar - fecha - select.number - yes', makeAppointment);
   agent.handleRequest(intentMap);
 });
 
@@ -239,6 +243,7 @@ function validateCalendar (psDateTimeStart) {
 
 function createCalendarEvent (psEvent, psDateTimeStart, psDateTimeEnd) {
   return new Promise((resolve, reject) => {
+    console.log(moment(psDateTimeStart).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') + ' // ' + moment(psDateTimeEnd).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a'));
   calendar.freebusy.query(
     {
       resource: {
