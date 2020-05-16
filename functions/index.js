@@ -28,14 +28,14 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   const agent = new WebhookClient({ request, response });
   const pFecha = moment(agent.parameters.date).tz('America/Costa_Rica');
 
-  function makeAppointment (agent) {
+  async function makeAppointment (agent) {
 
     const contextIn = agent.context.get('confirm-date');
     const dateTimeStart = moment(contextIn.parameters.date).tz('America/Costa_Rica');
     const dateTimeEnd =  moment(contextIn.parameters.date).tz('America/Costa_Rica').add(30, 'm'); //new Date(new Date(dateTimeStart).setHours(dateTimeStart.getHours() + 0,30));
     const appointmentTimeString = dateTimeStart.toLocaleString(
-      'en-US',
-      { month: 'short', day: 'numeric', hour: 'numeric', timeZone: timeZone }
+      'es-US',
+      { month: 'short', day: 'numeric', hour: 'numeric' }
     );
 
     const event = {
@@ -53,51 +53,63 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     }
     console.log('FECHAS CREATE: ' + contextIn.parameters.name +' -- '+ moment(contextIn.parameters.date).tz('America/Costa_Rica') +' -- '+ new Date(contextIn.parameters.date));
     // Check the availibility of the time, and make an appointment if there is time on the calendar
-    return createCalendarEvent(event, dateTimeStart, dateTimeEnd).then(() => {
-      agent.add(`Perfecto hemos agendado tu cita!!.😀
-      Te esperamos el ${appointmentTimeString}.`);
-     return null;
-    }).catch(() => {
+    try {
+      await createCalendarEvent(event, dateTimeStart, dateTimeEnd);
+      agent.add(`Perfecto hemos agendado tu cita!!🤖📆 Te esperamos el ${moment(dateTimeStart).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a')}.\n\nRecuerda porfavor llegar 10 minutos antes de la cita e ir solamente la persona que se cortará el cabello. 🙂`);
+      return null;
+    }
+    catch (e) {
       agent.add(`Disculpa, no hay espacio disponible a las ${appointmentTimeString}.`);
-    });
+    }
   }
 
-  function searchAvailability(agent) {
+  async function searchAvailability(agent) {
 
-    return checkDatesCalendar(pFecha).then((res) =>{
+    try {
+      const res = await checkDatesCalendar(pFecha);
 
-      agent.add('Las horas disponibles son las siguientes: \n' +
-                '*1* - ' + moment(res[0]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
-                '*2* - ' + moment(res[1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
-                '*3* - ' + moment(res[2]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +'\n'+
-                '*4* - ' + moment(res[3]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a'));
+      console.log('VALOR DE RES ' + res);
 
-    }).catch((err) =>{
+      if(res.length == 0){
+          agent.add('Lo lamento, este dia ya no hay citas diponibles, puedes intentar con otro. \n\n'+
+                    '_Recuerda que me puedes decir el dia o fecha en específico_ 🕐✂️');
+      }
+      else{
 
-      agent.add(err.message);
-
-    })
+        let arrHours = '';
+        const topCitas = (res.length) + 1;
+        for (let index = 0; index < res.length; index++) {
+          arrHours = arrHours + `*${index + 1}* - ${moment(res[index]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a')} \n`;
+        }
+        agent.add('Revisando las citas, hay disponibilidad en las siguientes horas: 🕐✂️  \n\n' +
+          '_Selecciona un número_' + '\n' + arrHours);
+      }
+    }
+    catch (err) {
+      if(err == 0)
+      {
+        agent.add('Disculpa, ya hoy no hay citas disponibles. Recuerda que nuestro horario es de las 10am a las 7pm. Puedes inetentar con otro día.')
+      }
+      //agent.add(err.message);
+    }
   }
 
-  function confirmHour(agent) {
+  async function confirmHour(agent) {
 
     const pFecha2 = agent.context.get('date');
     const name = agent.context.get('person-name');
     const num = parseInt(agent.parameters.number);
     console.log(name.parameters.name +' '+ toString(name.parameters.name));
-    return checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica')).then((res) =>{ 
-
-      agent.add(name.parameters.name.name + ', usted eligió: '+ moment(res[num-1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') + 
-                '\n*Sí* - Confirmar' + 
-                '\n*No* - Cancelar');
-
-      agent.context.set({name:"confirm-date", lifespan: 5, parameters:{date: res[num-1], name: name.parameters.name.name}});
-
-    }).catch((err) =>{
-
+    try {
+      const res = await checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica'));
+      agent.add('Excelente ' + name.parameters.name.name + ', guardaré la cita a su nombre el dia: ' + moment(res[num - 1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +
+        '\n\n*Sí* - Confirmar' +
+        '\n*No* - Cancelar');
+      agent.context.set({ name: "confirm-date", lifespan: 5, parameters: { date: res[num - 1], name: name.parameters.name.name } });
+    }
+    catch (err) {
       agent.add(err.message);
-
-    })
+    }
   }
 
   //Mapeo de Intents - Funciones
@@ -118,25 +130,22 @@ function checkDatesCalendar(psFecha){
     switch(psFecha.date())
     {
       case fechaHoy.date():
-
-        //if (fechaHoy.hour < 20 & (fechaHoy.day() >= 1 && fechaHoy.day() < 7))
-        //{
-          return validateCalendar(psFecha).then((res) =>{
-
-            resolve(res);
-    
-          }).catch((err) =>{
-    
-          reject(err.message);
-    
+        if (fechaHoy.hour() < 19){
+          console.log('ENTRA EN IF');
+          return validateCalendar(psFecha, moment().tz('America/Costa_Rica').hour()).then((res) =>{
+              resolve(res);
+            
+          }).catch((err) =>{    
+          reject(err.message);   
           })
-        //}
-        //else
-          //reject(new Error('Disculpa, hoy no hay citas disponibles. Recuerda que nuestro horario es de L-V hasta las 8PM.'));
+        }else {
+          console.log('ENTRA EN ELSE');
+          reject(0);
+        }  
         break;
       
       case fechaHoy.date()+1:
-        return validateCalendar(psFecha).then((res) =>{
+        return validateCalendar(psFecha, 10).then((res) =>{
 
           resolve(res);
     
@@ -148,7 +157,7 @@ function checkDatesCalendar(psFecha){
       break;
 
       default:
-        return validateCalendar(psFecha).then((res) =>{
+        return validateCalendar(psFecha, 10).then((res) =>{
 
           resolve(res);
     
@@ -163,12 +172,12 @@ function checkDatesCalendar(psFecha){
 }
 
 
-function validateCalendar (psDateTimeStart) {
+function validateCalendar (psDateTimeStart, psInitialHour) {
   return new Promise((resolve, reject) => {
-    var startDate = moment(psDateTimeStart).tz('America/Costa_Rica');//new Date(psDateTimeStart);
-    startDate.hours(8);
-    var endDate = moment(psDateTimeStart).tz('America/Costa_Rica');//new Date(psDateTimeStart);
-    endDate.hours(20);
+    var startDate = moment(psDateTimeStart).tz('America/Costa_Rica');
+    startDate.hours(psInitialHour);
+    var endDate = moment(psDateTimeStart).tz('America/Costa_Rica');
+    endDate.hours(19);
 
     let freeSlots = []; 
     let hourSlots = [];
@@ -190,7 +199,7 @@ function validateCalendar (psDateTimeStart) {
         events = res.data.calendars[calendarId_Brandon].busy
 
         events.forEach(function (event, index) { //calculate free from busy times
-          //console.log('EVENT: ' + event.start +' // '+ event.end );
+          console.log('EVENT: ' + event.start +' // '+ event.end );
           if (index == 0 && new Date(startDate) < new Date(event.start)) {
               freeSlots.push({startDate: startDate, endDate: event.start});
           }
@@ -210,13 +219,13 @@ function validateCalendar (psDateTimeStart) {
       if (events.length == 0) {
           freeSlots.push({startDate: startDate, endDate: endDate});
       }
-    
+         
       //console.log('FREE SLOTS COUNT: ' + freeSlots.length );
 
       freeSlots.forEach(function(free, index){
         var freeHours = (((new Date(free.endDate).getTime() - new Date(free.startDate).getTime()) / 1000) / 60) / 30 
         let freeH = new Date(free.startDate);
-        //console.log('FREE SLOTS: ' + free.startDate +' '+ free.endDate +' => '+ freeHours);
+        console.log('FREE SLOTS: ' + free.startDate +' '+ free.endDate +' => '+ freeHours);
         
         for (let i = 0; i < freeHours ; i++) {
           if (i === 0){
