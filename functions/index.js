@@ -77,12 +77,13 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       else{
 
         let arrHours = '';
-        const topCitas = (res.length) + 1;
+        const topCitas = res.length;
         for (let index = 0; index < res.length; index++) {
           arrHours = arrHours + `*${index + 1}* - ${moment(res[index]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a')} \n`;
         }
         agent.add('Revisando las citas, hay disponibilidad en las siguientes horas: 🕐✂️  \n\n' +
           '_Selecciona un número_' + '\n' + arrHours);
+        agent.context.set({ name: "count-hours", lifespan: 2, parameters: { counter: topCitas} });
       }
     }
     catch (err) {
@@ -90,7 +91,6 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       {
         agent.add('Disculpa, ya hoy no hay citas disponibles. Recuerda que nuestro horario es de las 10am a las 7pm. Puedes inetentar con otro día.')
       }
-      //agent.add(err.message);
     }
   }
 
@@ -98,25 +98,33 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
     const pFecha2 = agent.context.get('date');
     const name = agent.context.get('person-name');
+    const inCounter = agent.context.get('count-hours');
     const num = parseInt(agent.parameters.number);
+    const dateCounter = parseInt(inCounter.parameters.counter);
     console.log(name.parameters.name +' '+ toString(name.parameters.name));
-    try {
-      const res = await checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica'));
-      agent.add('Excelente ' + name.parameters.name.name + ', guardaré la cita a su nombre el dia: ' + moment(res[num - 1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +
-        '\n\n*Sí* - Confirmar' +
-        '\n*No* - Cancelar');
-      agent.context.set({ name: "confirm-date", lifespan: 5, parameters: { date: res[num - 1], name: name.parameters.name.name } });
+    if(num>= dateCounter && num<=dateCounter)
+    {
+      try {
+        const res = await checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica'));
+        agent.add('Excelente ' + name.parameters.name.name + ', guardaré la cita a su nombre el dia: ' + moment(res[num - 1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +
+          '\n\n*Sí* - Confirmar' +
+          '\n*A* - Agendar otra fecha');
+        agent.context.set({ name: "confirm-date", lifespan: 2, parameters: { date: res[num - 1], name: name.parameters.name.name } });
+      } 
+      catch (err) {
+        agent.add(err.message);
+      }
     }
-    catch (err) {
-      agent.add(err.message);
+    else{
+      agent.add('Por favor ingresa un número de los que se encuentran en la lista.');
     }
   }
 
   //Mapeo de Intents - Funciones
   let intentMap = new Map();
-  intentMap.set('Agendar Cita - Agendar - fecha', searchAvailability);
-  intentMap.set('Agendar Cita - Agendar - fecha - select.number', confirmHour);
-  intentMap.set('Agendar Cita - Agendar - fecha - select.number - yes', makeAppointment);
+  intentMap.set('Agendar Cita-fecha', searchAvailability);
+  intentMap.set('Agendar Cita-hora', confirmHour);
+  intentMap.set('Agendar Cita-hora - yes', makeAppointment);
   agent.handleRequest(intentMap);
 });
 
