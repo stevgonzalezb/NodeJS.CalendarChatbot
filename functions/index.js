@@ -32,7 +32,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
     const contextIn = agent.context.get('confirm-date');
     const dateTimeStart = moment(contextIn.parameters.date).tz('America/Costa_Rica');
-    const dateTimeEnd =  moment(contextIn.parameters.date).tz('America/Costa_Rica').add(30, 'm'); //new Date(new Date(dateTimeStart).setHours(dateTimeStart.getHours() + 0,30));
+    const dateTimeEnd =  moment(contextIn.parameters.date).tz('America/Costa_Rica').add(30, 'm');
     const appointmentTimeString = dateTimeStart.toLocaleString(
       'es-US',
       { month: 'short', day: 'numeric', hour: 'numeric' }
@@ -51,8 +51,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
         timeZone: timeZone,
       },
     }
-    console.log('FECHAS CREATE: ' + contextIn.parameters.name +' -- '+ moment(contextIn.parameters.date).tz('America/Costa_Rica') +' -- '+ new Date(contextIn.parameters.date));
-    // Check the availibility of the time, and make an appointment if there is time on the calendar
+
     try {
       await createCalendarEvent(event, dateTimeStart, dateTimeEnd);
       agent.add(`Perfecto hemos agendado tu cita!!🤖📆 Te esperamos el ${moment(dateTimeStart).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a')}.\n\nRecuerda porfavor llegar 10 minutos antes de la cita e ir solamente la persona que se cortará el cabello. 🙂`);
@@ -101,8 +100,9 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     const inCounter = agent.context.get('count-hours');
     const num = parseInt(agent.parameters.number);
     const dateCounter = parseInt(inCounter.parameters.counter);
-    console.log(name.parameters.name +' '+ toString(name.parameters.name));
-    if(num>= dateCounter && num<=dateCounter)
+    console.log(num +' '+ dateCounter);
+
+    if(num<=dateCounter)
     {
       try {
         const res = await checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica'));
@@ -131,49 +131,53 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
 
 function checkDatesCalendar(psFecha){
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
 
     const fechaHoy = moment().tz('America/Costa_Rica');
 
     switch(psFecha.date())
     {
       case fechaHoy.date():
-        if (fechaHoy.hour() < 19){
-          console.log('ENTRA EN IF');
-          return validateCalendar(psFecha, moment().tz('America/Costa_Rica').hour()).then((res) =>{
-              resolve(res);
-            
-          }).catch((err) =>{    
-          reject(err.message);   
-          })
+        if (fechaHoy.hour() < 18 && fechaHoy.hour() >= 10){
+          try {
+            const res = await validateCalendar(psFecha, moment().tz('America/Costa_Rica').hour());
+            resolve(res);
+          }
+          catch (err) {
+            reject(err.message);
+          }
+        if(fechaHoy.hour() < 18 && fechaHoy.hour() < 10){
+          try {
+            const res = await validateCalendar(psFecha, 10);
+            resolve(res);
+          }
+          catch (err) {
+            reject(err.message);
+          }
+        }
         }else {
-          console.log('ENTRA EN ELSE');
           reject(0);
         }  
         break;
       
       case fechaHoy.date()+1:
-        return validateCalendar(psFecha, 10).then((res) =>{
-
-          resolve(res);
-    
-        }).catch((err) =>{
-    
-         reject(err.message);
-    
-        })
+        try {
+          const res_1 = await validateCalendar(psFecha, 10);
+          resolve(res_1);
+        }
+        catch (err_1) {
+          reject(err_1.message);
+        }
       break;
 
       default:
-        return validateCalendar(psFecha, 10).then((res) =>{
-
-          resolve(res);
-    
-        }).catch((err) =>{
-    
-         reject(err.message);
-    
-        })
+        try {
+          const res_2 = await validateCalendar(psFecha, 10);
+          resolve(res_2);
+        }
+        catch (err_2) {
+          reject(err_2.message);
+        }
         break;
     }
   });
