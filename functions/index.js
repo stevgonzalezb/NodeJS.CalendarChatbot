@@ -29,16 +29,17 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   const pFecha = moment(agent.parameters.date).tz('America/Costa_Rica');
 
   async function makeAppointment (agent) {
+    console.log('INFO: Inicia makeAppointment Method');
 
-    const contextIn = agent.context.get('confirm-date');
-    const dateTimeStart = moment(contextIn.parameters.date).tz('America/Costa_Rica');
-    const dateTimeEnd =  moment(contextIn.parameters.date).tz('America/Costa_Rica').add(30, 'm');
-    const appointmentTimeString = dateTimeStart.toLocaleString(
+    let contextIn = agent.context.get('confirm-date');
+    let dateTimeStart = moment(contextIn.parameters.date).tz('America/Costa_Rica');
+    let dateTimeEnd =  moment(contextIn.parameters.date).tz('America/Costa_Rica').add(30, 'm');
+    let appointmentTimeString = dateTimeStart.toLocaleString(
       'es-US',
       { month: 'short', day: 'numeric', hour: 'numeric' }
     );
 
-    const event = {
+    let event = {
       summary: `${contextIn.parameters.name} - CITA CHATBOT`,
       description: ` `,
       colorId: 1,
@@ -52,9 +53,12 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       },
     }
 
+    console.log('INFO: Event Object Created - ' + event.summary);
+
     try {
       await createCalendarEvent(event, dateTimeStart, dateTimeEnd);
       agent.add(`Perfecto hemos agendado tu cita!!🤖📆 Te esperamos el ${moment(dateTimeStart).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a')}.\n\nRecuerda porfavor llegar 10 minutos antes de la cita e ir solamente la persona que se cortará el cabello. 🙂`);
+      console.log('INFO: Finaliza satisfactoriamente makeAppointment Method');
       return null;
     }
     catch (e) {
@@ -63,53 +67,58 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   }
 
   async function searchAvailability(agent) {
-
+    console.log('INFO: Inicia seachAvailability Method')
     try {
-      const res = await checkDatesCalendar(pFecha);
-
-      console.log('VALOR DE RES ' + res);
+      let res = await checkDatesCalendar(pFecha);
 
       if(res.length == 0){
           agent.add('Lo lamento, este dia ya no hay citas diponibles, puedes intentar con otro. \n\n'+
                     '_Recuerda que me puedes decir el dia o fecha en específico_ 🕐✂️');
+          console.log('INFO: Finzaliza satisfactoriamente seachAvailability Method - Dia Ocupado')
       }
       else{
 
         let arrHours = '';
-        const topCitas = res.length;
+        let topCitas = res.length;
         for (let index = 0; index < res.length; index++) {
           arrHours = arrHours + `*${index + 1}* - ${moment(res[index]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a')} \n`;
         }
         agent.add('Revisando las citas, hay disponibilidad en las siguientes horas: 🕐✂️  \n\n' +
           '_Selecciona un número_' + '\n' + arrHours);
         agent.context.set({ name: "count-hours", lifespan: 2, parameters: { counter: topCitas} });
+        console.log('INFO: Finzaliza satisfactoriamente seachAvailability Method')
       }
     }
     catch (err) {
       if(err == 0)
       {
         agent.add('Disculpa, ya hoy no hay citas disponibles. Recuerda que nuestro horario es de las 10am a las 7pm. Puedes inetentar con otro día.')
+        console.log('INFO: Finzaliza satisfactoriamente seachAvailability Method - Fuera de horario')
       }
     }
   }
 
   async function confirmHour(agent) {
 
-    const pFecha2 = agent.context.get('date');
-    const name = agent.context.get('person-name');
-    const inCounter = agent.context.get('count-hours');
-    const num = parseInt(agent.parameters.number);
-    const dateCounter = parseInt(inCounter.parameters.counter);
-    console.log(num +' '+ dateCounter);
+    console.log('INFO: Inicia confirmHour Method');
+
+    let pFecha2 = agent.context.get('date');
+    let name = agent.context.get('person-name');
+    let inCounter = agent.context.get('count-hours');
+    let num = parseInt(agent.parameters.number);
+    let dateCounter = parseInt(inCounter.parameters.counter);
+
+    console.log('INFO: Confirma hora cliente: ' + name.parameters.name.name);
 
     if(num<=dateCounter)
     {
       try {
-        const res = await checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica'));
+        let res = await checkDatesCalendar(moment(pFecha2.parameters.date).tz('America/Costa_Rica'));
         agent.add('Excelente ' + name.parameters.name.name + ', guardaré la cita a su nombre el dia: ' + moment(res[num - 1]).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') +
           '\n\n*Sí* - Confirmar' +
           '\n*A* - Agendar otra fecha');
-        agent.context.set({ name: "confirm-date", lifespan: 2, parameters: { date: res[num - 1], name: name.parameters.name.name } });
+        agent.context.set({ name: "confirm-date", lifespan: 3, parameters: { date: res[num - 1], name: name.parameters.name.name } });
+        console.log('INFO: Finaliza satisfactoriamente confirmHour Method');
       } 
       catch (err) {
         agent.add(err.message);
@@ -133,36 +142,39 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 function checkDatesCalendar(psFecha){
   return new Promise(async (resolve, reject) => {
 
-    const fechaHoy = moment().tz('America/Costa_Rica');
+    let fechaHoy = moment().tz('America/Costa_Rica');
 
     switch(psFecha.date())
     {
       case fechaHoy.date():
-        if (fechaHoy.hour() < 18 && fechaHoy.hour() >= 10){
+        if (fechaHoy.hour() < 10){
           try {
-            const res = await validateCalendar(psFecha, moment().tz('America/Costa_Rica').hour());
-            resolve(res);
-          }
-          catch (err) {
-            reject(err.message);
-          }
-        if(fechaHoy.hour() < 18 && fechaHoy.hour() < 10){
-          try {
-            const res = await validateCalendar(psFecha, 10);
+            let res = await validateCalendar(psFecha, 10);
             resolve(res);
           }
           catch (err) {
             reject(err.message);
           }
         }
-        }else {
-          reject(0);
+        else {
+            if(fechaHoy.hour() >= 10 && fechaHoy.hour() < 18){
+              try {
+                let res = await validateCalendar(psFecha, moment().tz('America/Costa_Rica').hour());
+                resolve(res);
+              }
+              catch (err) {
+                reject(err.message);
+              }
+            }   
+          else{
+            reject(0);
+          }         
         }  
         break;
       
       case fechaHoy.date()+1:
         try {
-          const res_1 = await validateCalendar(psFecha, 10);
+          let res_1 = await validateCalendar(psFecha, 10);
           resolve(res_1);
         }
         catch (err_1) {
@@ -172,7 +184,7 @@ function checkDatesCalendar(psFecha){
 
       default:
         try {
-          const res_2 = await validateCalendar(psFecha, 10);
+          let res_2 = await validateCalendar(psFecha, 10);
           resolve(res_2);
         }
         catch (err_2) {
@@ -205,13 +217,11 @@ function validateCalendar (psDateTimeStart, psInitialHour) {
         },
       },
       (err, res) => {
-        // Check for errors in our query and log them if they exist.
         if (err) return console.error('Free Busy Query Error: ', err)
 
         events = res.data.calendars[calendarId_Brandon].busy
 
-        events.forEach(function (event, index) { //calculate free from busy times
-          console.log('EVENT: ' + event.start +' // '+ event.end );
+        events.forEach(function (event, index) { 
           if (index == 0 && new Date(startDate) < new Date(event.start)) {
               freeSlots.push({startDate: startDate, endDate: event.start});
           }
@@ -231,40 +241,31 @@ function validateCalendar (psDateTimeStart, psInitialHour) {
       if (events.length == 0) {
           freeSlots.push({startDate: startDate, endDate: endDate});
       }
-         
-      //console.log('FREE SLOTS COUNT: ' + freeSlots.length );
 
       freeSlots.forEach(function(free, index){
         var freeHours = (((new Date(free.endDate).getTime() - new Date(free.startDate).getTime()) / 1000) / 60) / 30 
         let freeH = new Date(free.startDate);
-        console.log('FREE SLOTS: ' + free.startDate +' '+ free.endDate +' => '+ freeHours);
         
         for (let i = 0; i < freeHours ; i++) {
           if (i === 0){
-            //console.log('PUSH: ' + new Date(free.startDate));
             hourSlots.push(free.startDate);
           }
           else{
-            //console.log('PUSH: ' + new Date(freeH.setMinutes(freeH.getMinutes()+30)));
             hourSlots.push(freeH.setMinutes(freeH.getMinutes()+30));  
           }
         }
       
       })
-
       resolve(hourSlots);
-
       }
     )
 
   });
-   
 }
 
 
 function createCalendarEvent (psEvent, psDateTimeStart, psDateTimeEnd) {
   return new Promise((resolve, reject) => {
-    console.log(moment(psDateTimeStart).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a') + ' // ' + moment(psDateTimeEnd).tz('America/Costa_Rica').format('D/MM/YYYY, h:mm a'));
   calendar.freebusy.query(
     {
       resource: {
@@ -275,27 +276,19 @@ function createCalendarEvent (psEvent, psDateTimeStart, psDateTimeEnd) {
       },
     },
     (err, res) => {
-      // Check for errors in our query and log them if they exist.
       if (err) return console.error('Free Busy Query Error: ', err)
   
-      // Create an array of all events on our calendar during that time.
       const eventArr = res.data.calendars[calendarId_Brandon].busy;
-  
-      // Check if event array is empty which means we are not busy
+
       if (eventArr.length === 0)
-        // If we are not busy create a new calendar event.
         return calendar.events.insert(
           { calendarId: calendarId_Brandon, resource: psEvent },
           err => {
-            // Check for errors and log them if they exist.
             if (err) return console.error('Error Creating Calender Event:', err)
-            // Else log that the event was created.
-            resolve(psEvent)//console.log('Calendar event successfully created.')
+            resolve(psEvent)
           }
         )
-  
-      // If event array is not empty log that we are busy.
-      reject(err || new Error('Requested time conflicts with another appointment')); //console.log(`Sorry I'm busy...`)
+      reject(err || new Error('Requested time conflicts with another appointment'));
     }
   )
 });
