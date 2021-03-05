@@ -9,14 +9,14 @@ const moment = require('moment-timezone');
 
 //Credenciales de autenticación chatbotcr
 const oAuth2Client = new OAuth2(
-  '998451104891-nrac98l3pntj6tke4cm6q0k0ifeehqqt.apps.googleusercontent.com',
-  'NmGZnzPN361EITV0UcpnaOew'
+  '',
+  ''
 )
 oAuth2Client.setCredentials({
-  refresh_token: '1//044ZqEvaKN-dfCgYIARAAGAQSNwF-L9IrrySW-5SbHqJelBi-G4xbIbnqDsKv3MnC-MfISdGIJ49-aVmUgN2PlJt1SQDup5iD9KM',
+  refresh_token: '',
 })
 
-const calendarId_Brandon = "s1tt67eiflb120io7tif3pmpp0@group.calendar.google.com"
+const calendarId_Brandon = ""
 const calendar = google.calendar({ version: 'v3', auth: oAuth2Client })
 const timeZone = 'America/Costa_Rica';
 const timeZoneOffset = '-06:00';
